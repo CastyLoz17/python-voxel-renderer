@@ -1,8 +1,8 @@
 ## 3D Voxel renderer
-### using nothing but turtle (for rendering)
+### using nothing but tkinter (for rendering)
 #### and math (for computing)
 
-yes its minecraft but with pure python n stuff and yes its slow but hey it works (sequel to 3D renderer using nothing but turtle (for rendering) and math (for computing))
+yes its minecraft but with pure python n stuff but hey it works (sequel to 3D renderer using nothing but turtle (for rendering) and math (for computing))
 
 
 ## how 2 run
