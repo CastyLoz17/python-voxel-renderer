@@ -1,35 +1,17 @@
-import turtle
+import tkinter as tk
 from math import *
-from typing import Union, List, Dict, Tuple, Optional
+from typing import Union, List, Dict, Tuple
 import time
 import random
 from dataclasses import dataclass
 
-import keyboard
-
-try:
-    using_mouse = True
-    import mouse
-except (ImportError, OSError):
-    using_mouse = False
-    from pynput.mouse import Listener as MouseListener
-
 Number = Union[int, float]
 
 
-# Vectors
 class Vector2:
-    """A 2D vector class with basic mathematical operations."""
-
     __slots__ = ["x", "y"]
 
     def __init__(self, x: Number, y: Number):
-        """Initialize a 2D vector.
-
-        Args:
-            x: X component
-            y: Y component
-        """
         self.x, self.y = float(x), float(y)
 
     def __repr__(self):
@@ -67,19 +49,15 @@ class Vector2:
         return hash((round(self.x, 10), round(self.y, 10)))
 
     def dot(self, other: "Vector2") -> float:
-        """Calculate dot product with another vector."""
         return self.x * other.x + self.y * other.y
 
     def magnitude(self) -> float:
-        """Calculate the magnitude of the vector."""
         return sqrt(self.x * self.x + self.y * self.y)
 
     def magnitude_squared(self) -> float:
-        """Calculate the squared magnitude (faster than magnitude)."""
         return self.x * self.x + self.y * self.y
 
     def normalize(self) -> "Vector2":
-        """Return a normalized version of this vector."""
         mag_sq = self.x * self.x + self.y * self.y
         if mag_sq == 0:
             return Vector2(0, 0)
@@ -87,39 +65,26 @@ class Vector2:
         return Vector2(self.x * inv_mag, self.y * inv_mag)
 
     def distance_to(self, other: "Vector2") -> float:
-        """Calculate distance to another vector."""
         dx = self.x - other.x
         dy = self.y - other.y
         return sqrt(dx * dx + dy * dy)
 
     def angle(self) -> float:
-        """Get the angle of this vector in radians."""
         return atan2(self.y, self.x)
 
     def rotate(self, angle: float) -> "Vector2":
-        """Rotate the vector by the given angle in radians."""
         cos_a, sin_a = cos(angle), sin(angle)
         return Vector2(self.x * cos_a - self.y * sin_a, self.x * sin_a + self.y * cos_a)
 
     def is_zero(self) -> bool:
-        """Check if the vector is zero (within epsilon)."""
         epsilon = 1e-10
         return abs(self.x) < epsilon and abs(self.y) < epsilon
 
 
 class Vector3:
-    """A 3D vector class with basic mathematical operations."""
-
     __slots__ = ["x", "y", "z"]
 
     def __init__(self, x: Number, y: Number, z: Number):
-        """Initialize a 3D vector.
-
-        Args:
-            x: X component
-            y: Y component
-            z: Z component
-        """
         self.x, self.y, self.z = float(x), float(y), float(z)
 
     def __repr__(self):
@@ -145,7 +110,8 @@ class Vector3:
     def __truediv__(self, scalar: Number) -> "Vector3":
         if scalar == 0:
             raise ZeroDivisionError("Cannot divide vector by zero")
-        return Vector3(self.x / scalar, self.y / scalar, self.z / scalar)
+        inv_scalar = 1.0 / scalar
+        return Vector3(self.x * inv_scalar, self.y * inv_scalar, self.z * inv_scalar)
 
     def __neg__(self) -> "Vector3":
         return Vector3(-self.x, -self.y, -self.z)
@@ -162,115 +128,72 @@ class Vector3:
         return hash((round(self.x, 10), round(self.y, 10), round(self.z, 10)))
 
     def dot(self, other: "Vector3") -> float:
-        """Calculate dot product with another vector."""
         return self.x * other.x + self.y * other.y + self.z * other.z
 
     def cross(self, other: "Vector3") -> "Vector3":
-        """Calculate cross product with another vector."""
         return Vector3(
             self.y * other.z - self.z * other.y,
             self.z * other.x - self.x * other.z,
             self.x * other.y - self.y * other.x,
         )
 
-    def magnitude(self) -> float:
-        """Calculate the magnitude of the vector."""
-        return sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
-
     def magnitude_squared(self) -> float:
-        """Calculate the squared magnitude (faster than magnitude)."""
         return self.x * self.x + self.y * self.y + self.z * self.z
 
+    def magnitude(self) -> float:
+        return sqrt(self.magnitude_squared())
+
     def normalize(self) -> "Vector3":
-        """Return a normalized version of this vector."""
-        mag_sq = self.x * self.x + self.y * self.y + self.z * self.z
+        mag_sq = self.magnitude_squared()
         if mag_sq == 0:
             return Vector3(0, 0, 0)
         inv_mag = 1.0 / sqrt(mag_sq)
         return Vector3(self.x * inv_mag, self.y * inv_mag, self.z * inv_mag)
 
-    def distance_to(self, other: "Vector3") -> float:
-        """Calculate distance to another vector."""
+    def distance_to_squared(self, other: "Vector3") -> float:
         dx = self.x - other.x
         dy = self.y - other.y
         dz = self.z - other.z
-        return sqrt(dx * dx + dy * dy + dz * dz)
+        return dx * dx + dy * dy + dz * dz
+
+    def distance_to(self, other: "Vector3") -> float:
+        return sqrt(self.distance_to_squared(other))
 
     def is_zero(self) -> bool:
-        """Check if the vector is zero (within epsilon)."""
         epsilon = 1e-10
         return abs(self.x) < epsilon and abs(self.y) < epsilon and abs(self.z) < epsilon
 
     def project_onto(self, other: "Vector3") -> "Vector3":
-        """Project this vector onto another vector."""
         if other.is_zero():
             return Vector3(0, 0, 0)
         return other * (self.dot(other) / other.magnitude_squared())
 
     def reflect(self, normal: "Vector3") -> "Vector3":
-        """Reflect this vector off a surface with the given normal."""
         return self - 2 * self.project_onto(normal)
-
-    def rotate_point_around_axis(self, anchor, axis, angle):
-        """Rotate a point around an arbitrary axis using Rodrigues' rotation formula.
-
-        Args:
-            point: The point to rotate
-            anchor: The anchor point of the rotation axis
-            axis: The axis of rotation (will be normalized)
-            angle: Rotation angle in radians
-
-        Returns:
-            The rotated point
-        """
-        p = self - anchor
-        k = axis.normalize()
-
-        cos_a = cos(angle)
-        sin_a = sin(angle)
-
-        rotated = (
-            p * cos_a
-            + Vector3(
-                k.y * p.z - k.z * p.y, k.z * p.x - k.x * p.z, k.x * p.y - k.y * p.x
-            )
-            * sin_a
-            + k * (k.dot(p)) * (1 - cos_a)
-        )
-
-        return rotated + anchor
 
 
 def zero2() -> Vector2:
-    """Create a zero Vector2."""
     return Vector2(0, 0)
 
 
 def zero3() -> Vector3:
-    """Create a zero Vector3."""
     return Vector3(0, 0, 0)
 
 
 def unit_x3() -> Vector3:
-    """Create a unit vector in the X direction."""
     return Vector3(1, 0, 0)
 
 
 def unit_y3() -> Vector3:
-    """Create a unit vector in the Y direction."""
     return Vector3(0, 1, 0)
 
 
 def unit_z3() -> Vector3:
-    """Create a unit vector in the Z direction."""
     return Vector3(0, 0, 1)
 
 
-# World
 @dataclass
 class Block:
-    """Represents a single block with texture information"""
-
     block_type: int
     top_texture: int = 0
     side_texture: int = 0
@@ -286,14 +209,14 @@ class Block:
 class TextureManager:
     def __init__(self):
         self.textures = {
-            0: "#000000",  # Air/Empty (black)
-            1: "#654321",  # Dirt (brown)
-            2: "#228b22",  # Grass top (green)
-            3: "#8b4513",  # Dirt/Grass side (brown)
-            4: "#a0a0a0",  # Stone (gray)
-            5: "#2c3e50",  # Bedrock (dark blue-gray)
-            6: "#8b4513",  # Tree trunk (brown)
-            7: "#228b22",  # Leaves (green)
+            0: "#000000",
+            1: "#654321",
+            2: "#228b22",
+            3: "#8b4513",
+            4: "#a0a0a0",
+            5: "#2c3e50",
+            6: "#8b4513",
+            7: "#228b22",
         }
 
         self.textures = {
@@ -312,13 +235,13 @@ class TextureManager:
         }
 
         self.block_definitions = {
-            0: Block(0, 0, 0, 0),  # Air
-            1: Block(1, 1, 1, 1),  # Dirt - all dirt texture
-            2: Block(2, 2, 3, 1),  # Grass - grass top, dirt sides, dirt bottom
-            3: Block(3, 4, 4, 4),  # Stone - all stone texture
-            4: Block(4, 5, 5, 5),  # Bedrock - all bedrock texture
-            5: Block(5, 6, 6, 6),  # Tree Trunk - all trunk texture
-            6: Block(6, 7, 7, 7),  # Leaves - all leaves texture
+            0: Block(0, 0, 0, 0),
+            1: Block(1, 1, 1, 1),
+            2: Block(2, 2, 3, 1),
+            3: Block(3, 4, 4, 4),
+            4: Block(4, 5, 5, 5),
+            5: Block(5, 6, 6, 6),
+            6: Block(6, 7, 7, 7),
         }
         self._lighting_cache = {}
         self._precompute_lighting()
@@ -374,8 +297,6 @@ class TextureManager:
 
 
 class NoiseGenerator:
-    """Simple noise generator for terrain"""
-
     def __init__(self, seed: int = None):
         self.seed = seed
         if seed:
@@ -412,7 +333,6 @@ class NoiseGenerator:
         )
 
     def noise3d(self, x, y, z):
-        """3D Perlin noise for better cave generation"""
         X = int(floor(x)) & 255
         Y = int(floor(y)) & 255
         Z = int(floor(z)) & 255
@@ -471,23 +391,6 @@ class NoiseGenerator:
     def _lerp(self, t, a, b):
         return a + t * (b - a)
 
-    def fbm(self, x, y, z, octaves=4, persistence=0.5, lacunarity=2.0):
-        """Fractional Brownian Motion for more complex noise patterns"""
-        total = 0.0
-        frequency = 1.0
-        amplitude = 1.0
-        max_value = 0.0
-
-        for i in range(octaves):
-            total += (
-                self.noise3d(x * frequency, y * frequency, z * frequency) * amplitude
-            )
-            max_value += amplitude
-            amplitude *= persistence
-            frequency *= lacunarity
-
-        return total / max_value
-
 
 class TreeGenerator:
     def __init__(self, noise_gen: NoiseGenerator):
@@ -519,7 +422,7 @@ class TreeGenerator:
         for y in range(
             surface_y + 1, min(surface_y + trunk_height + 1, Chunk.CHUNK_HEIGHT)
         ):
-            chunk.blocks[(local_x, y, local_z)] = 5  # Tree trunk block ID
+            chunk.blocks[(local_x, y, local_z)] = 5
 
         leaves_start = surface_y + max(2, trunk_height - 1)
         leaves_end = min(surface_y + trunk_height + 1, Chunk.CHUNK_HEIGHT - 1)
@@ -558,7 +461,7 @@ class TreeGenerator:
                         ):
                             existing_block = chunk.blocks.get((leaf_x, y, leaf_z), 0)
                             if existing_block == 0:
-                                chunk.blocks[(leaf_x, y, leaf_z)] = 6  # Leaves block ID
+                                chunk.blocks[(leaf_x, y, leaf_z)] = 6
 
 
 class Chunk:
@@ -600,25 +503,17 @@ class Chunk:
 
         self._visible_faces_cache.clear()
 
-        solid_blocks = set(self.blocks.items())
-
-        for (x, y, z), block_type in solid_blocks:
+        for (x, y, z), block_type in list(self.blocks.items()):
             if block_type == 0:
                 continue
 
             visible_faces = []
             for face_name, (dx, dy, dz) in face_offsets.items():
-                adj_pos = (x + dx, y + dy, z + dz)
+                adj_x, adj_y, adj_z = x + dx, y + dy, z + dz
 
-                if adj_pos in self.blocks:
-                    if self.blocks[adj_pos] == 0:
-                        visible_faces.append(face_name)
-                else:
-                    adjacent_block = self._get_adjacent_block_safe(
-                        x + dx, y + dy, z + dz
-                    )
-                    if adjacent_block == 0:
-                        visible_faces.append(face_name)
+                adjacent_block = self._get_adjacent_block_safe(adj_x, adj_y, adj_z)
+                if adjacent_block == 0:
+                    visible_faces.append(face_name)
 
             if visible_faces:
                 self._visible_faces_cache[(x, y, z)] = visible_faces
@@ -628,7 +523,7 @@ class Chunk:
 
     def _get_adjacent_block_safe(self, x: int, y: int, z: int) -> int:
         if not (0 <= y < self.CHUNK_HEIGHT):
-            return 0
+            return 0 if y >= self.CHUNK_HEIGHT else 1
 
         if 0 <= x < self.CHUNK_SIZE and 0 <= z < self.CHUNK_SIZE:
             return self.blocks.get((x, y, z), 0)
@@ -711,15 +606,15 @@ class Chunk:
         self, world_x: int, y: int, world_z: int, surface_height: int
     ) -> int:
         if y == surface_height and surface_height > 15:
-            return 2  # Grass block
+            return 2
         elif y >= surface_height - 2 and surface_height > 15:
-            return 1  # Dirt block
+            return 1
         elif y < 2:
-            return 4  # Bedrock block
+            return 4
         elif y < 5:
-            return 3  # Stone block
+            return 3
         else:
-            return 3  # Stone block
+            return 3
 
     def get_block(self, x: int, y: int, z: int) -> int:
         if (
@@ -729,9 +624,6 @@ class Chunk:
         ):
             return self.blocks.get((x, y, z), 0)
         return 0
-
-    def get_block_with_neighbors(self, x: int, y: int, z: int) -> int:
-        return self._get_adjacent_block_safe(x, y, z)
 
     def get_visible_faces(self, x: int, y: int, z: int) -> List[str]:
         if self._cache_dirty or not self._face_culling_computed:
@@ -791,8 +683,7 @@ class ChunkManager:
             local_z = world_z - chunk_z * Chunk.CHUNK_SIZE
             block = chunk.get_block(local_x, world_y, local_z)
 
-            if len(self.block_cache) < 1000:
-                self.block_cache[cache_key] = block
+            self.block_cache[cache_key] = block
 
             return block
 
@@ -815,7 +706,6 @@ class ChunkManager:
         return chunk.get_block(local_x, world_y, local_z)
 
     def remove_block(self, world_x: int, world_y: int, world_z: int) -> bool:
-        """Remove a block from the world"""
         if not (0 <= world_y < Chunk.CHUNK_HEIGHT):
             return False
 
@@ -843,7 +733,6 @@ class ChunkManager:
     def create_block(
         self, world_x: int, world_y: int, world_z: int, block_type: int
     ) -> bool:
-        """Create a block in the world"""
         if not (0 <= world_y < Chunk.CHUNK_HEIGHT) or block_type <= 0:
             return False
 
@@ -966,11 +855,8 @@ class ChunkManager:
                         self.chunks[neighbor_key].mark_dirty()
 
 
-# Player
 @dataclass
 class RenderFace:
-    """Face to be rendered with depth sorting and lighting"""
-
     distance: float
     projected: List[Tuple[float, float]]
     color: Tuple[int, int, int]
@@ -1006,7 +892,6 @@ class Player:
         return Vector3(self.pos.x, self.pos.y + self.height, self.pos.z)
 
     def raycast_to_block(self, direction: Vector3, max_distance: float = 5.0):
-        """Cast a ray from the player's head position to find the first block hit"""
         start_pos = self.get_head_position()
         step_size = 0.1
         steps = int(max_distance / step_size)
@@ -1028,7 +913,6 @@ class Player:
     def raycast_to_placement_position(
         self, direction: Vector3, max_distance: float = 5.0
     ):
-        """Cast a ray to find the position where a block should be placed"""
         start_pos = self.get_head_position()
         step_size = 0.1
         steps = int(max_distance / step_size)
@@ -1054,7 +938,6 @@ class Player:
         return None
 
     def break_block_at_crosshair(self, direction: Vector3):
-        """Break the block the player is looking at"""
         block_pos = self.raycast_to_block(direction, self.interaction_range)
         if block_pos:
             return self.chunk_manager.remove_block(
@@ -1063,7 +946,6 @@ class Player:
         return False
 
     def place_block_at_crosshair(self, direction: Vector3, block_type: int = 3):
-        """Place a block at the face the player is looking at"""
         placement_pos = self.raycast_to_placement_position(
             direction, self.interaction_range
         )
@@ -1112,34 +994,6 @@ class Player:
             return self.chunk_manager.create_block(
                 world_x, world_y, world_z, block_type
             )
-        return False
-
-    def break_block(self, block_pos: Vector3):
-        """Remove a block from the world"""
-        if not block_pos:
-            return False
-
-        world_x, world_y, world_z = int(block_pos.x), int(block_pos.y), int(block_pos.z)
-
-        chunk_x, chunk_z = self.chunk_manager.get_chunk_coords(world_x, world_z)
-        chunk_key = (chunk_x, chunk_z)
-
-        if chunk_key in self.chunk_manager.chunks:
-            chunk = self.chunk_manager.chunks[chunk_key]
-            local_x = world_x - chunk_x * Chunk.CHUNK_SIZE
-            local_z = world_z - chunk_z * Chunk.CHUNK_SIZE
-
-            if (local_x, world_y, local_z) in chunk.blocks:
-                del chunk.blocks[(local_x, world_y, local_z)]
-                chunk.mark_dirty()
-                self.chunk_manager.refresh_chunk_faces(chunk_x, chunk_z)
-
-                cache_key = (world_x, world_y, world_z)
-                if cache_key in self.chunk_manager.block_cache:
-                    del self.chunk_manager.block_cache[cache_key]
-
-                return True
-
         return False
 
     def check_collision(self, new_pos):
@@ -1229,19 +1083,6 @@ class Player:
         self.velocity.x *= damping_factor
         self.velocity.z *= damping_factor
 
-    def move(self, steps, direction, deltatime):
-        movement = direction * steps * deltatime
-        self.velocity.x += movement.x
-        self.velocity.z += movement.z
-
-    def strafe(self, steps, right_vector, deltatime):
-        movement = right_vector * steps * deltatime
-        self.velocity.x += movement.x
-        self.velocity.z += movement.z
-
-    def move_axis(self, world, deltatime):
-        self.velocity += world * deltatime
-
     def move_relative(
         self, movement, camera_direction, deltatime, horizontal_only=False
     ):
@@ -1284,9 +1125,8 @@ class Camera:
     __slots__ = (
         "pos",
         "direction",
-        "pen",
+        "root",
         "canvas",
-        "screen",
         "texture_manager",
         "chunk_manager",
         "face_normals",
@@ -1295,12 +1135,10 @@ class Camera:
         "faces_data",
         "_projection_cache",
         "_frustum_cache",
-        "_render_stats",
-        "_last_pos",
-        "_last_dir",
-        "_static_chunks_cache",
         "player",
         "highlighted_block",
+        "screen_width",
+        "screen_height",
     )
 
     def __init__(self, player, direction=None, screen_width=800, screen_height=600):
@@ -1308,19 +1146,23 @@ class Camera:
         self.pos = player.get_head_position()
         self.direction = direction.normalize() if direction else Vector3(0, 0, 1)
         self.highlighted_block = None
+        self.screen_width = screen_width
+        self.screen_height = screen_height
 
-        turtle.tracer(0, 0)
-        turtle.setup(screen_width, screen_height)
-        turtle.colormode(255)
-        self.screen = turtle.getscreen()
-        self.screen.cv._rootwindow.resizable(False, False)
+        self.root = tk.Tk()
+        self.root.title("Tkinter Minecraft")
+        self.root.geometry(f"{screen_width}x{screen_height}")
+        self.root.resizable(False, False)
 
-        turtle.hideturtle()
-        self.pen = turtle.Turtle()
-        self.pen.speed(0)
-        self.pen.hideturtle()
-        self.pen.penup()
-        self.canvas = self.pen.screen.getcanvas()
+        self.canvas = tk.Canvas(
+            self.root,
+            width=screen_width,
+            height=screen_height,
+            bg="#85C8FF",
+            highlightthickness=0,
+        )
+        self.canvas.pack()
+
         self.texture_manager = TextureManager()
         self.chunk_manager = player.chunk_manager
 
@@ -1364,48 +1206,13 @@ class Camera:
 
         self._projection_cache = {}
         self._frustum_cache = {}
-        self._render_stats = {"faces_rendered": 0, "faces_culled": 0}
-        self._last_pos = None
-        self._last_dir = None
-        self._static_chunks_cache = {}
 
     def update_position(self):
         self.pos = self.player.get_head_position()
         self.highlighted_block = self.player.raycast_to_block(self.direction)
         self._clear_position_caches()
 
-    def calculate_relative(self, pos, horizontal_only=False):
-        if horizontal_only:
-            forward = Vector3(self.direction.x, 0, self.direction.z)
-            if forward.magnitude() > 0:
-                forward = forward.normalize()
-            else:
-                forward = Vector3(0, 0, 1)
-        else:
-            forward = self.direction
-
-        up = Vector3(0, 1, 0)
-        right = forward.cross(up)
-        if right.magnitude() > 0:
-            right = right.normalize()
-        else:
-            right = Vector3(1, 0, 0)
-
-        if not horizontal_only:
-            up = right.cross(forward).normalize()
-
-        absolute_movement = Vector3(0, 0, 0)
-        absolute_movement += right * pos.x
-        if horizontal_only:
-            absolute_movement.y += pos.y
-        else:
-            absolute_movement += up * pos.y
-        absolute_movement += forward * pos.z
-
-        return absolute_movement
-
     def rotate(self, pitch_delta, yaw_delta):
-        """Rotate camera with hard pitch clamping to prevent gimbal lock"""
         current_pitch = asin(max(-1, min(1, self.direction.y)))
 
         new_pitch = current_pitch + pitch_delta
@@ -1428,15 +1235,16 @@ class Camera:
         self._clear_position_caches()
 
     def _clear_position_caches(self):
-        self._last_pos = None
-        self._last_dir = None
         if len(self._projection_cache) > 200:
             self._projection_cache.clear()
         if len(self._frustum_cache) > 50:
             self._frustum_cache.clear()
 
     def is_face_visible(self, face_center, face_normal):
-        view_vec = (face_center - self.pos).normalize()
+        view_vec = face_center - self.pos
+        if view_vec.magnitude() == 0:
+            return False
+        view_vec = view_vec.normalize()
         return face_normal.dot(view_vec) < 0
 
     def get_block_texture(self, block_type: int, face_name: str) -> int:
@@ -1449,7 +1257,6 @@ class Camera:
             return block.side_texture
 
     def clip_polygon_near_plane(self, vertices_3d, near_plane=0.1):
-        """Optimized polygon clipping with early exits and cached computations"""
         if not vertices_3d or len(vertices_3d) < 3:
             return []
 
@@ -1494,7 +1301,6 @@ class Camera:
         return output if len(output) >= 3 else []
 
     def project_point_batch(self, points, fov=90, screen_width=800, screen_height=600):
-        """Batch project multiple points for better performance"""
         if not points:
             return []
 
@@ -1506,7 +1312,7 @@ class Camera:
             return [None] * len(points)
 
         right = right.normalize()
-        actual_up = right.cross(forward)
+        actual_up = right.cross(forward).normalize()
 
         fov_rad = radians(fov)
         f = 1.0 / tan(fov_rad * 0.5)
@@ -1522,25 +1328,27 @@ class Camera:
             y = rel.dot(actual_up)
             z = rel.dot(forward)
 
-            if z == 0:
-                z = 0.001
+            if z <= 0.01:
+                results.append(None)
+                continue
 
             screen_x = (x * f / z) * aspect_ratio
             screen_y = y * f / z
 
-            screen_x = screen_x * screen_scale_x + screen_scale_x
-            screen_y = screen_y * screen_scale_y + screen_scale_y
+            screen_x = screen_x * screen_scale_x
+            screen_y = screen_y * screen_scale_y
 
-            results.append((screen_x - screen_scale_x, screen_y - screen_scale_y, z))
+            results.append((screen_x, -screen_y, z))
 
         return results
 
     def is_face_in_frustum_fast(
         self, block_center: Vector3, max_distance: float = 25.0
     ) -> bool:
-        """Optimized frustum culling with distance-based early exits"""
-        rel = block_center - self.pos
-        distance_sq = rel.x * rel.x + rel.y * rel.y + rel.z * rel.z
+        dx = block_center.x - self.pos.x
+        dy = block_center.y - self.pos.y
+        dz = block_center.z - self.pos.z
+        distance_sq = dx * dx + dy * dy + dz * dz
 
         max_distance_sq = max_distance * max_distance
         if distance_sq > max_distance_sq:
@@ -1549,19 +1357,25 @@ class Camera:
         if distance_sq < 25:
             return True
 
-        forward_dot = rel.dot(self.direction)
+        forward_dot = (
+            dx * self.direction.x + dy * self.direction.y + dz * self.direction.z
+        )
         if forward_dot <= -1.0:
             return False
 
         if distance_sq > 100:
-            right = self.direction.cross(Vector3(0, 1, 0))
-            if right.magnitude() == 0:
+            direction_mag = sqrt(
+                self.direction.x * self.direction.x
+                + self.direction.z * self.direction.z
+            )
+            if direction_mag == 0:
                 return True
 
-            right = right.normalize()
-            right_dot = abs(rel.dot(right))
-            up = right.cross(self.direction).normalize()
-            up_dot = abs(rel.dot(up))
+            right_x = self.direction.z / direction_mag
+            right_z = -self.direction.x / direction_mag
+
+            right_dot = abs(dx * right_x + dz * right_z)
+            up_dot = abs(dy)
 
             distance = sqrt(distance_sq)
             fov_factor = distance * 1.2
@@ -1579,88 +1393,71 @@ class Camera:
         min_brightness=0.2,
         render_distance=2,
     ):
-        """Optimized render_world with batched operations and reduced allocations"""
-        self.pen.clear()
+        self.canvas.delete("all")
 
         if self.chunk_manager.render_distance != render_distance:
             self.chunk_manager.render_distance = render_distance
 
         visible_chunks = self.chunk_manager.get_visible_chunks(self.pos)
         render_faces = []
-        faces_processed = 0
-        faces_culled = 0
-
-        camera_chunk_x, camera_chunk_z = self.chunk_manager.get_chunk_coords(
-            self.pos.x, self.pos.z
-        )
 
         max_render_distance_sq = max_render_distance * max_render_distance
-        render_distance_sq = render_distance * render_distance
+        pos_x, pos_y, pos_z = self.pos.x, self.pos.y, self.pos.z
+        highlighted_pos = self.highlighted_block
 
         for chunk in visible_chunks:
-            chunk_distance_sq = (chunk.chunk_x - camera_chunk_x) ** 2 + (
-                chunk.chunk_z - camera_chunk_z
-            ) ** 2
+            chunk_blocks = chunk.blocks.items()
+            chunk_x_offset = chunk.chunk_x * Chunk.CHUNK_SIZE
+            chunk_z_offset = chunk.chunk_z * Chunk.CHUNK_SIZE
 
-            if chunk_distance_sq > render_distance_sq:
-                continue
-
-            blocks_to_render = []
-
-            for (local_x, local_y, local_z), block_type in chunk.blocks.items():
-                world_x = chunk.chunk_x * Chunk.CHUNK_SIZE + local_x
-                world_y = local_y
-                world_z = chunk.chunk_z * Chunk.CHUNK_SIZE + local_z
-
-                block_center = Vector3(world_x + 0.5, world_y + 0.5, world_z + 0.5)
-
-                rel = block_center - self.pos
-                distance_sq = rel.x * rel.x + rel.y * rel.y + rel.z * rel.z
-
-                if distance_sq > max_render_distance_sq:
-                    faces_culled += 1
+            for (local_x, local_y, local_z), block_type in list(chunk_blocks):
+                if block_type == 0:
                     continue
 
+                world_x = chunk_x_offset + local_x
+                world_y = local_y
+                world_z = chunk_z_offset + local_z
+
+                block_center_x = world_x + 0.5
+                block_center_y = world_y + 0.5
+                block_center_z = world_z + 0.5
+
+                dx = block_center_x - pos_x
+                dy = block_center_y - pos_y
+                dz = block_center_z - pos_z
+                distance_sq = dx * dx + dy * dy + dz * dz
+
+                if distance_sq > max_render_distance_sq:
+                    continue
+
+                block_center = Vector3(block_center_x, block_center_y, block_center_z)
+
                 if not self.is_face_in_frustum_fast(block_center, max_render_distance):
-                    faces_culled += 1
                     continue
 
                 visible_faces = chunk.get_visible_faces(local_x, local_y, local_z)
                 if not visible_faces:
-                    faces_culled += 1
                     continue
 
-                blocks_to_render.append(
-                    (
-                        (world_x, world_y, world_z),
-                        block_type,
-                        visible_faces,
-                        sqrt(distance_sq),
-                        block_center,
-                    )
-                )
-
-            for (
-                (world_x, world_y, world_z),
-                block_type,
-                visible_faces,
-                distance,
-                block_center,
-            ) in blocks_to_render:
+                distance = sqrt(distance_sq)
                 vertices = [
                     Vector3(world_x, world_y, world_z) + vertex_offset
                     for vertex_offset in self.cube_vertices_pattern
                 ]
 
+                highlight = (
+                    highlighted_pos
+                    and highlighted_pos.x == world_x
+                    and highlighted_pos.y == world_y
+                    and highlighted_pos.z == world_z
+                )
+
                 for face_name in visible_faces:
-                    faces_processed += 1
                     indices, offset = self.faces_data[face_name]
                     face_center = block_center + offset
                     face_normal = self.face_normals[face_name]
 
-                    view_vec = face_center - self.pos
-                    if face_normal.dot(view_vec) >= 0:
-                        faces_culled += 1
+                    if not self.is_face_visible(face_center, face_normal):
                         continue
 
                     face_vertices_3d = [vertices[i] for i in indices]
@@ -1670,7 +1467,6 @@ class Camera:
                     )
 
                     if len(clipped_vertices_3d) < 3:
-                        faces_culled += 1
                         continue
 
                     projections = self.project_point_batch(
@@ -1678,175 +1474,189 @@ class Camera:
                     )
 
                     projected = []
+                    valid_projection = True
                     for proj in projections:
-                        if proj is not None:
-                            projected.append((proj[0], proj[1]))
-
-                    if len(projected) >= 3:
-                        texture_id = self.get_block_texture(block_type, face_name)
-                        ambient_occlusion = self.face_ao[face_name]
-                        color = self.texture_manager.get_color(
-                            texture_id,
-                            distance,
-                            ambient_occlusion,
-                            max_render_distance,
-                            min_brightness,
-                        )
-
-                        highlight = (
-                            self.highlighted_block == Vector3(world_x, world_y, world_z)
-                            if self.highlighted_block
-                            else False
-                        )
-
-                        render_faces.append(
-                            RenderFace(
-                                distance, projected, color, ambient_occlusion, highlight
+                        if proj is None:
+                            valid_projection = False
+                            break
+                        projected.append(
+                            (
+                                proj[0] + screen_width // 2,
+                                proj[1] + screen_height // 2,
                             )
                         )
-                    else:
-                        faces_culled += 1
 
-        self._render_stats = {
-            "faces_rendered": len(render_faces),
-            "faces_culled": faces_culled,
-            "faces_processed": faces_processed,
-        }
+                    if not valid_projection or len(projected) < 3:
+                        continue
+
+                    on_screen = any(
+                        -100 <= px <= screen_width + 100
+                        and -100 <= py <= screen_height + 100
+                        for px, py in projected
+                    )
+
+                    if not on_screen:
+                        continue
+
+                    texture_id = self.get_block_texture(block_type, face_name)
+                    ambient_occlusion = self.face_ao[face_name]
+                    color = self.texture_manager.get_color(
+                        texture_id,
+                        distance,
+                        ambient_occlusion,
+                        max_render_distance,
+                        min_brightness,
+                    )
+
+                    render_faces.append(
+                        RenderFace(
+                            distance, projected, color, ambient_occlusion, highlight
+                        )
+                    )
 
         render_faces.sort(key=lambda x: x.distance, reverse=True)
 
-        self.pen.color((0, 0, 0))
-        self.pen.width(1)
-
-        face_limit = 400
-        for face in render_faces[-face_limit:]:
+        for face in render_faces:
             if len(face.projected) >= 3:
-                self.pen.fillcolor(face.color)
-                self.pen.goto(*face.projected[0])
                 if face.highlight:
-                    self.pen.pendown()
-                self.pen.begin_fill()
-                for point in face.projected[1:]:
-                    self.pen.goto(*point)
-                self.pen.goto(*face.projected[0])
-                self.pen.end_fill()
-                if face.highlight:
-                    self.pen.penup()
+                    outline_color = "#FFFFFF"
+                    outline_width = 1
+                else:
+                    outline_color = ""
+                    outline_width = 0
 
-        self.canvas.create_line(0, 4, 0, -5, width=1, capstyle="butt", fill="#000")
-        self.canvas.create_line(4, 0, -5, -0, width=1, capstyle="butt", fill="#000")
+                color_hex = "#{:02x}{:02x}{:02x}".format(*face.color)
 
+                coords = []
+                for point in face.projected:
+                    coords.extend([point[0], point[1]])
 
-def mouse_init():
-    global mouse_delta_x, mouse_delta_y, last_mouse_x, last_mouse_y, mouse_initialized, mouse_listener, current_mouse_x, current_mouse_y
-    mouse_delta_x = 0
-    mouse_delta_y = 0
-    last_mouse_x = 0
-    last_mouse_y = 0
-    current_mouse_x = 400
-    current_mouse_y = 300
-    mouse_initialized = False
+                try:
+                    self.canvas.create_polygon(
+                        coords,
+                        fill=color_hex,
+                        outline=outline_color,
+                        width=outline_width,
+                    )
+                except tk.TclError:
+                    continue
 
-    if not using_mouse:
-
-        def on_move(x, y):
-            global current_mouse_x, current_mouse_y
-            current_mouse_x = x
-            current_mouse_y = y
-
-        mouse_listener = MouseListener(on_move=on_move)
-        mouse_listener.start()
+        center_x, center_y = self.screen_width // 2, self.screen_height // 2
+        self.canvas.create_line(
+            center_x - 5, center_y, center_x + 5, center_y, fill="#000000", width=2
+        )
+        self.canvas.create_line(
+            center_x, center_y - 5, center_x, center_y + 5, fill="#000000", width=2
+        )
 
 
 def handle_movement(
+    root,
     speed=6.0,
     sensitivity=0.01,
     player: Player = None,
     jump_strength: float = 10.0,
     cyote_time: int = 2,
 ):
-    global mouse_initialized, cyote, current_mouse_x, current_mouse_y, last_mouse_x, last_mouse_y
+    """
+    Handle player movement and camera rotation using tkinter's built-in event system.d
+    """
+    global cyote, current_mouse_x, current_mouse_y, last_mouse_x, last_mouse_y
 
     camera_movement = zero3()
     camera_angle = zero2()
-    break_block = False
-    place_block = False
+
+    if not hasattr(root, "_pressed_keys"):
+        root._pressed_keys = set()
+
+    def key_press(event):
+        root._pressed_keys.add(event.keysym.lower())
+        return "break"
+
+    def key_release(event):
+        root._pressed_keys.discard(event.keysym.lower())
+        return "break"
+
+    def mouse_motion(event):
+        global current_mouse_x, current_mouse_y
+        current_mouse_x = event.x_root
+        current_mouse_y = event.y_root
+
+    def mouse_click(event):
+        if event.num == 1:
+            player.break_block_at_crosshair(camera.direction)
+        elif event.num == 3:
+            player.place_block_at_crosshair(camera.direction, hold_id)
+
+    def scroll_get_block(scroll):
+        selectable_blocks = [
+            k for k in chunk_manager.texture_manager.block_definitions.keys() if k
+        ]
+        return selectable_blocks[scroll % len(selectable_blocks)]
+
+    def mouse_wheel(event):
+        global scroll, hold_id
+        hold_id = scroll_get_block(scroll)
+
+    # Linux scroll functions cuz wtf why are there 2 buttons for it
+    def scroll_up(_):
+        global scroll, hold_id
+        scroll += 1
+        hold_id = scroll_get_block(scroll)
+
+    def scroll_down(_):
+        global scroll, hold_id
+        scroll -= 1
+        hold_id = scroll_get_block(scroll)
+
+    root.bind("<KeyPress>", key_press)
+    root.bind("<KeyRelease>", key_release)
+    root.bind("<Motion>", mouse_motion)
+    root.bind("<Button-1>", mouse_click)
+    root.bind("<Button-3>", mouse_click)
+    root.bind("<MouseWheel>", mouse_wheel)
+
+    root.bind("<Button-4>", scroll_up)
+    root.bind("<Button-5>", scroll_down)
+
+    root.focus_set()
+
+    keys = root._pressed_keys
+
+    if "w" in keys:
+        camera_movement.z += speed
+    if "s" in keys:
+        camera_movement.z -= speed
+    if "a" in keys:
+        camera_movement.x -= speed
+    if "d" in keys:
+        camera_movement.x += speed
+
+    if player is None:
+        if "control_l" in keys or "control_r" in keys:
+            camera_movement.y = -speed
+        if "space" in keys:
+            camera_movement.y = speed
+    else:
+        if player.on_ground:
+            cyote = 0
+        else:
+            cyote += 1
+
+        if "space" in keys and cyote <= cyote_time:
+            cyote = cyote_time + 1
+            player.jump(jump_strength, _forced=True)
 
     try:
-        keys = {
-            "w": keyboard.is_pressed("w"),
-            "s": keyboard.is_pressed("s"),
-            "a": keyboard.is_pressed("a"),
-            "d": keyboard.is_pressed("d"),
-            "ctrl": keyboard.is_pressed("ctrl"),
-            "space": keyboard.is_pressed("space"),
-            "left_click": keyboard.is_pressed("q"),
-            "right_click": keyboard.is_pressed("e"),
-        }
-
-        if keys["w"]:
-            camera_movement.z += speed
-        if keys["s"]:
-            camera_movement.z -= speed
-        if keys["a"]:
-            camera_movement.x -= speed
-        if keys["d"]:
-            camera_movement.x += speed
-
-        if keys["left_click"]:
-            break_block = True
-        if keys["right_click"]:
-            place_block = True
-
-        if player is None:
-            if keys["ctrl"]:
-                camera_movement.y = -speed
-            if keys["space"]:
-                camera_movement.y = speed
-
-        else:
-            if player.on_ground:
-                cyote = 0
-            else:
-                cyote += 1
-
-            if keys["space"] and cyote <= cyote_time:
-                cyote = cyote_time + 1
-                player.jump(jump_strength, _forced=True)
-
-    except Exception:
+        camera_angle.x -= (current_mouse_y - last_mouse_y) * sensitivity
+        camera_angle.y += (current_mouse_x - last_mouse_x) * sensitivity
+    except NameError:
         pass
 
-    if mouse_locked:
-        try:
-            if using_mouse:
-                x, y = mouse.get_position()
-                if mouse_initialized:
-                    camera_angle.x -= (y - 600) * sensitivity
-                    camera_angle.y += (x - 1200) * sensitivity
-                    mouse.move(1200, 600)
-                else:
-                    mouse_initialized = True
-                    mouse.move(1200, 600)
-            else:
-                if mouse_initialized:
-                    camera_angle.x -= (current_mouse_y - last_mouse_y) * sensitivity
-                    camera_angle.y += (current_mouse_x - last_mouse_x) * sensitivity
-                else:
-                    mouse_initialized = True
+    last_mouse_x = current_mouse_x
+    last_mouse_y = current_mouse_y
 
-                last_mouse_x = current_mouse_x
-                last_mouse_y = current_mouse_y
-        except Exception:
-            pass
-
-    return camera_movement, camera_angle, break_block, place_block
-
-
-# Performance monitoring
-frame = 0
-samples = 10
-fps_data = []
+    return camera_movement, camera_angle
 
 
 def accurate_sleep(seconds: int | float):
@@ -1861,66 +1671,125 @@ def accurate_sleep(seconds: int | float):
         time.sleep(seconds)
 
 
+fps_data = []
+
+
 def normalize_framerate(target):
+    last_frame_time = [time.time()]
+
     def decorator(func):
         def wrapped(*args, **kwargs):
             global frame, fps_data
-            frame += 1
-            start_time = time.time()
-            deltatime = 1.0 / target
+            current_time = time.time()
+
+            actual_deltatime = current_time - last_frame_time[0]
+            last_frame_time[0] = current_time
+
+            deltatime = min(actual_deltatime, 1.0 / 15.0)
 
             result = func(deltatime, *args, **kwargs)
 
-            camera.pen.color("#000000")
-            uncapped = 1 / (time.time() - start_time)
-            fps_data.append(uncapped)
-            if len(fps_data) > samples:
+            frame_time = time.time() - current_time
+            uncapped_fps = 1 / frame_time if frame_time > 0 else float("inf")
+
+            fps_data.append(uncapped_fps)
+            if len(fps_data) > 10:
                 fps_data.pop(0)
 
-            camera.pen.goto(-390, 260)
-            camera.pen.write(
-                f"POS: {camera.pos.x:.2f}, {camera.pos.y:.2f}, {camera.pos.z:.2f}"
+            text_info = []
+
+            # player moment info
+            yaw = atan2(camera.direction.x, camera.direction.z)
+            pitch = atan2(
+                -camera.direction.y,
+                sqrt(
+                    camera.direction.x * camera.direction.x
+                    + camera.direction.z * camera.direction.z
+                ),
             )
-            camera.pen.goto(-390, 240)
-            camera.pen.write(
-                f"VEL: {player.velocity.x:.2f}, {player.velocity.y:.2f}, {player.velocity.z:.2f} (SPD: {player.velocity.magnitude():.2f}>{Vector3(player.velocity.x, 0 ,player.velocity.z).magnitude():.2f})"
+
+            text_info.append(
+                f"POS: {camera.pos.x:.2f}, {camera.pos.y:.2f}, {camera.pos.z:.2f} | FACING pitch {degrees(pitch):.2f} yaw {degrees(yaw):.2f}"
             )
-            camera.pen.goto(-390, 220)
-            camera.pen.write(
-                f"MEM: {process.memory_info().rss / (1024 * 1024):.2f}MB/{process.memory_info().vms / (1024 * 1024):.2f}MB"
+            text_info.append(
+                f"VEL: {player.velocity.x:.2f}, {player.velocity.y:.2f}, {player.velocity.z:.2f}"
             )
-            camera.pen.goto(-390, 200)
-            camera.pen.write("OTHER DATA:")
-            camera.pen.goto(-370, 180)
-            camera.pen.write(
+            text_info.append(
+                f"SPD: {player.velocity.magnitude():.2f}> (Horizontal only) {Vector3(player.velocity.x, 0, player.velocity.z).magnitude():.2f}"
+            )
+
+            # program weight info
+            try:
+                import psutil
+                import os
+
+                process = psutil.Process(os.getpid())
+                text_info.append(
+                    f"MEM: {process.memory_info().rss / (1024 * 1024):.2f}MB"
+                )
+            except ImportError:
+                text_info.append("MEM: N/A")
+
+            # world info
+            text_info.append(
                 f"SEED: {chunk_manager.noise_gen.seed} (DRAMATICNESS: {chunk_manager.dramaticness})"
             )
-            camera.pen.goto(-370, 160)
+            text_info.append(
+                f"Chunks: {", ".join([f'{i.capitalize()}: {v}' for i, v in chunk_manager.get_chunk_load_stats().items()])}"
+            )
+
+            # framerate/deltatime info
+            fps_avg = sum(fps_data) / len(fps_data) if fps_data else 0
+
+            time_to_sleep = max(0, (1 / target) - frame_time)
+
+            _target = time.perf_counter() + time_to_sleep
+            while time.perf_counter() < _target:
+                pass
+
+            total_frame_time = time.time() - current_time
+            capped_fps = 1 / total_frame_time if total_frame_time > 0 else target
+
+            text_info.append(f"FPS Data:")
+            text_info.append(f"    real: {capped_fps:.1f} ")
+            text_info.append(f"    avg (uncapped): {fps_avg:.1f}")
+            text_info.append(f"    uncapped:{uncapped_fps:.1f} | target:{target}")
+
+            text_info.append(
+                f"Deltatime: {deltatime:.6f} | real: {actual_deltatime:.6f}"
+            )
+
+            # WAIYA, holding, control info
             waiya = player.raycast_to_block(camera.direction)
             if waiya:
-                camera.pen.write(
-                    f"WAIYA: {chunk_manager.texture_manager.get_block_name(chunk_manager.get_block_world(*waiya))} ({chunk_manager.get_block_world(*waiya)})"
+                block_name = chunk_manager.texture_manager.get_block_name(
+                    chunk_manager.get_block_world(*waiya)
                 )
+                block_id = chunk_manager.get_block_world(*waiya)
+                text_info.append(f"WAIYA: {block_name} ({block_id})")
             else:
-                camera.pen.write(f"WAIYA: None")
-            camera.pen.goto(-370, 140)
-            camera.pen.write(
+                text_info.append("WAIYA: None")
+
+            text_info.append(
                 f"Holding: {chunk_manager.texture_manager.get_block_name(hold_id)} ({hold_id})"
             )
-            camera.pen.goto(-390, 120)
-            camera.pen.write(
-                "WASD to move, Mouse to look, Q to break, E to place, scroll to change item selection"
+            text_info.append(
+                "Controls: WASD move, Mouse look, RMB place, LMB break, scroll to choose blocks"
             )
 
-            time_to_sleep = max(0, (1 / target) - (time.time() - start_time))
-            time.sleep(time_to_sleep)
+            # print(text_info)
 
-            camera.pen.goto(-390, 280)
-            camera.pen.write(
-                f"FPS: {sum(fps_data)/len(fps_data):.1f} | {1/(time.time() - start_time):.3f} ({uncapped:.3f} | {target})"
-            )
+            for i, text in enumerate(text_info):
+                camera.canvas.create_text(
+                    10,
+                    10 + i * 15,
+                    anchor="nw",
+                    text=text,
+                    fill="black",
+                    font=("Arial", 8),
+                )
 
-            turtle.update()
+            camera.canvas.update()
 
             return result
 
@@ -1930,18 +1799,10 @@ def normalize_framerate(target):
 
 
 if __name__ == "__main__":
-    mouse_initialized = False
-    mouse_locked = True
+    print("Starting")
     cyote = 0
-    mouse_listener = None
     current_mouse_x = 400
     current_mouse_y = 300
-    last_mouse_x = 400
-    last_mouse_y = 300
-    last_break_time = 0
-    last_place_time = 0
-
-    turtle.bgcolor("#85C8FF")
 
     chunk_manager = ChunkManager(
         TextureManager(), render_distance=2, dramaticness=2.3, seed=28168261
@@ -1952,53 +1813,26 @@ if __name__ == "__main__":
         height=1.2,
         width=0.5,
         move_coefficient=0.000001,
-        gravity=38.0,
+        gravity=27.0,
         max_fall_speed=float("inf"),
     )
     camera = Camera(player, Vector3(0, 0, 1), screen_width=800, screen_height=600)
     scroll = 3
     hold_id = 3
 
-    mouse_init()
-
-    def on_scroll(event):
-        global scroll, hold_id
-        if isinstance(event, mouse.WheelEvent):
-            scroll += int(event.delta)
-            # Filter out air block (ID 0) from selectable blocks
-            selectable_blocks = [
-                k
-                for k in chunk_manager.texture_manager.block_definitions.keys()
-                if k != 0
-            ]
-            hold_id = selectable_blocks[scroll % len(selectable_blocks)]
-
-    mouse.hook(on_scroll)
-
-    @normalize_framerate(20)
+    @normalize_framerate(60)
     def main(deltatime):
-        global mouse_locked, last_break_time, last_place_time
-
-        movement, angle, break_block, place_block = handle_movement(
+        (
+            movement,
+            angle,
+        ) = handle_movement(
+            camera.root,
             speed=60.0,
             sensitivity=0.005,
             player=player,
-            jump_strength=10.0,
+            jump_strength=8.0,
             cyote_time=3,
         )
-
-        current_time = time.time()
-
-        if break_block and current_time - last_break_time > 0.2:
-            player.break_block_at_crosshair(camera.direction)
-            last_break_time = current_time
-
-        if place_block and current_time - last_place_time > 0.2:
-            player.place_block_at_crosshair(
-                camera.direction,
-                block_type=hold_id,
-            )
-            last_place_time = current_time
 
         player.move_relative(
             movement, camera.direction, deltatime, horizontal_only=True
@@ -2021,19 +1855,12 @@ if __name__ == "__main__":
 
         chunk_manager.unload_distant_chunks(camera.pos)
 
-        try:
-            if keyboard.is_pressed("p"):
-                mouse_locked = not mouse_locked
-                time.sleep(0.2)
+    try:
+        while True:
+            main()
+            camera.root.update()
+    except KeyboardInterrupt:
+        camera.root.destroy()
 
-            if keyboard.is_pressed("esc"):
-                mouse_locked = False
-        except:
-            pass
-
-    import psutil, os
-
-    process = psutil.Process(os.getpid())
-
-    while True:
-        main()
+    except tk.TclError:
+        pass
